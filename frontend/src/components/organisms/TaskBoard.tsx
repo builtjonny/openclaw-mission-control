@@ -82,6 +82,10 @@ const columns: Array<{
   },
 ];
 
+/**
+ * Human-friendly due date label (month + day) for compact cards.
+ * Returns `undefined` for missing/invalid dates so callers can omit UI.
+ */
 const formatDueDate = (value?: string | null) => {
   if (!value) return undefined;
   const date = parseApiDatetime(value);
@@ -97,6 +101,16 @@ type CardPosition = { left: number; top: number };
 const KANBAN_MOVE_ANIMATION_MS = 240;
 const KANBAN_MOVE_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
+/**
+ * Kanban-style task board with 4 columns.
+ *
+ * Notes:
+ * - Uses a lightweight FLIP animation (via `useLayoutEffect`) to animate cards
+ *   to their new positions when tasks move between columns.
+ * - Drag interactions can temporarily fight browser-managed drag images; the
+ *   animation is disabled while a card is being dragged.
+ * - Respects `prefers-reduced-motion`.
+ */
 export const TaskBoard = memo(function TaskBoard({
   tasks,
   onTaskSelect,
@@ -125,6 +139,12 @@ export const TaskBoard = memo(function TaskBoard({
     [],
   );
 
+  /**
+   * Snapshot each card's position relative to the scroll container.
+   *
+   * We store these measurements so we can compute deltas (prev - next) and
+   * apply the FLIP technique on the next render.
+   */
   const measurePositions = useCallback((): Map<string, CardPosition> => {
     const positions = new Map<string, CardPosition>();
     const container = boardRef.current;
