@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Auth mode: "clerk" for Clerk JWT auth, "local" for shared bearer token auth.
     auth_mode: AuthMode
     local_auth_token: str = ""
+    jwt_secret_key: str = ""
 
     # Clerk auth (auth only; roles stored in DB)
     clerk_secret_key: str = ""
@@ -77,6 +78,9 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "LOCAL_AUTH_TOKEN must be at least 50 characters and non-placeholder when AUTH_MODE=local.",
                 )
+        # Default jwt_secret_key to local_auth_token when in local mode.
+        if self.auth_mode == AuthMode.LOCAL and not self.jwt_secret_key.strip():
+            self.jwt_secret_key = self.local_auth_token.strip()
         # In dev, default to applying Alembic migrations at startup to avoid
         # schema drift (e.g. missing newly-added columns).
         if "db_auto_migrate" not in self.model_fields_set and self.environment == "dev":

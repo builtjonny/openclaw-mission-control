@@ -1,7 +1,7 @@
 "use client";
 
 import { ClerkProvider } from "@clerk/nextjs";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { isLikelyValidClerkPublishableKey } from "@/auth/clerkKey";
 import {
@@ -10,9 +10,11 @@ import {
   isLocalAuthMode,
 } from "@/auth/localAuth";
 import { LocalAuthLogin } from "@/components/organisms/LocalAuthLogin";
+import { RegisterForm } from "@/components/organisms/RegisterForm";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const localMode = isLocalAuthMode();
+  const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
     if (!localMode) {
@@ -22,7 +24,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (localMode) {
     if (!getLocalAuthToken()) {
-      return <LocalAuthLogin />;
+      if (showRegister) {
+        return (
+          <RegisterForm onSwitchToLogin={() => setShowRegister(false)} />
+        );
+      }
+      return (
+        <LocalAuthLogin
+          onSwitchToRegister={() => setShowRegister(true)}
+        />
+      );
     }
     return <>{children}</>;
   }

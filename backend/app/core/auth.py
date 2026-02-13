@@ -418,13 +418,36 @@ async def _resolve_local_auth_context(
         if required:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         return None
+
+    # Attempt 1: Try JWT decode (email/password user tokens).
+    from app.core.jwt import JWTError, decode_access_token
+
+    try:
+        claims = decode_access_token(token)
+        subject = claims.get("sub")
+        if isinstance(subject, str) and subject:
+            user = await crud.get_one_by(session, User, clerk_user_id=subject)
+            if user is not None:
+                from app.services.organizations import ensure_member_for_user
+
+                await ensure_member_for_user(session, user)
+                return AuthContext(actor_type="user", user=user)
+            logger.warning(
+                "auth.local.jwt.user_not_found subject=%s",
+                subject[-6:] if subject else "",
+            )
+    except JWTError:
+        pass  # Not a JWT; try legacy token.
+
+    # Attempt 2: Legacy shared bearer token.
     expected = settings.local_auth_token.strip()
-    if not expected or not compare_digest(token, expected):
-        if required:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-        return None
-    user = await _get_or_create_local_user(session)
-    return AuthContext(actor_type="user", user=user)
+    if expected and compare_digest(token, expected):
+        user = await _get_or_create_local_user(session)
+        return AuthContext(actor_type="user", user=user)
+
+    if required:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return None
 
 
 def _parse_subject(claims: dict[str, object]) -> str | None:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
 
 import { setLocalAuthToken } from "@/auth/localAuth";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,44 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 const LOCAL_AUTH_TOKEN_MIN_LENGTH = 50;
+
+type AuthTab = "email" | "token";
+
+async function loginWithCredentials(
+  email: string,
+  password: string,
+): Promise<{ token: string } | { error: string }> {
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!rawBaseUrl) {
+    return { error: "NEXT_PUBLIC_API_URL is not set." };
+  }
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { error: "Unable to reach backend." };
+  }
+
+  if (response.ok) {
+    const data = (await response.json()) as { access_token: string };
+    return { token: data.access_token };
+  }
+  if (response.status === 401) {
+    return { error: "Invalid email or password." };
+  }
+  const body = (await response.json().catch(() => null)) as {
+    detail?: string;
+  } | null;
+  return {
+    error: body?.detail ?? `Login failed (HTTP ${response.status}).`,
+  };
+}
 
 async function validateLocalToken(token: string): Promise<string | null> {
   const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -41,16 +79,50 @@ async function validateLocalToken(token: string): Promise<string | null> {
 
 type LocalAuthLoginProps = {
   onAuthenticated?: () => void;
+  onSwitchToRegister?: () => void;
 };
 
 const defaultOnAuthenticated = () => window.location.reload();
 
-export function LocalAuthLogin({ onAuthenticated }: LocalAuthLoginProps) {
+export function LocalAuthLogin({
+  onAuthenticated,
+  onSwitchToRegister,
+}: LocalAuthLoginProps) {
+  const [tab, setTab] = useState<AuthTab>("email");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEmailLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail) {
+      setError("Email is required.");
+      return;
+    }
+    if (!trimmedPassword) {
+      setError("Password is required.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await loginWithCredentials(trimmedEmail, trimmedPassword);
+    setIsSubmitting(false);
+
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+
+    setLocalAuthToken(result.token);
+    setError(null);
+    (onAuthenticated ?? defaultOnAuthenticated)();
+  };
+
+  const handleTokenLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleaned = token.trim();
     if (!cleaned) {
@@ -64,9 +136,9 @@ export function LocalAuthLogin({ onAuthenticated }: LocalAuthLoginProps) {
       return;
     }
 
-    setIsValidating(true);
+    setIsSubmitting(true);
     const validationError = await validateLocalToken(cleaned);
-    setIsValidating(false);
+    setIsSubmitting(false);
     if (validationError) {
       setError(validationError);
       return;
@@ -91,7 +163,11 @@ export function LocalAuthLogin({ onAuthenticated }: LocalAuthLoginProps) {
               Self-host mode
             </span>
             <div className="rounded-xl bg-[color:var(--accent-soft)] p-2 text-[color:var(--accent)]">
-              <Lock className="h-5 w-5" />
+              {tab === "email" ? (
+                <Mail className="h-5 w-5" />
+              ) : (
+                <Lock className="h-5 w-5" />
+              )}
             </div>
           </div>
           <div className="space-y-1">
@@ -99,48 +175,133 @@ export function LocalAuthLogin({ onAuthenticated }: LocalAuthLoginProps) {
               Local Authentication
             </h1>
             <p className="text-sm text-muted">
-              Enter your access token to unlock Mission Control.
+              {tab === "email"
+                ? "Sign in with your email and password."
+                : "Enter your access token to unlock Mission Control."}
             </p>
           </div>
         </CardHeader>
         <CardContent className="pt-5">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label
-                htmlFor="local-auth-token"
-                className="text-xs font-semibold uppercase tracking-[0.08em] text-muted"
+          {tab === "email" ? (
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="login-email"
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-muted"
+                >
+                  Email
+                </label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoFocus
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="login-password"
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-muted"
+                >
+                  Password
+                </label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  disabled={isSubmitting}
+                />
+              </div>
+              {error && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isSubmitting}
               >
-                Access token
-              </label>
-              <Input
-                id="local-auth-token"
-                type="password"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                placeholder="Paste token"
-                autoFocus
-                disabled={isValidating}
-                className="font-mono"
-              />
-            </div>
-            {error ? (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            ) : (
-              <p className="text-xs text-muted">
-                Token must be at least {LOCAL_AUTH_TOKEN_MIN_LENGTH} characters.
-              </p>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={isValidating}
-            >
-              {isValidating ? "Validating..." : "Continue"}
-            </Button>
-          </form>
+                {isSubmitting ? "Signing in..." : "Sign in"}
+              </Button>
+              <div className="flex items-center justify-between text-xs text-muted">
+                <button
+                  type="button"
+                  className="underline hover:text-strong"
+                  onClick={() => {
+                    setError(null);
+                    setTab("token");
+                  }}
+                >
+                  Use access token instead
+                </button>
+                {onSwitchToRegister && (
+                  <button
+                    type="button"
+                    className="underline hover:text-strong"
+                    onClick={onSwitchToRegister}
+                  >
+                    Create account
+                  </button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleTokenLogin} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="local-auth-token"
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-muted"
+                >
+                  Access token
+                </label>
+                <Input
+                  id="local-auth-token"
+                  type="password"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  placeholder="Paste token"
+                  autoFocus
+                  disabled={isSubmitting}
+                  className="font-mono"
+                />
+              </div>
+              {error ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              ) : (
+                <p className="text-xs text-muted">
+                  Token must be at least {LOCAL_AUTH_TOKEN_MIN_LENGTH}{" "}
+                  characters.
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Validating..." : "Continue"}
+              </Button>
+              <button
+                type="button"
+                className="text-xs text-muted underline hover:text-strong"
+                onClick={() => {
+                  setError(null);
+                  setTab("email");
+                }}
+              >
+                Sign in with email instead
+              </button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

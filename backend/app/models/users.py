@@ -24,6 +24,7 @@ class User(QueryModel, table=True):
     notes: str | None = None
     context: str | None = None
     is_super_admin: bool = Field(default=False)
+    password_hash: str | None = Field(default=None)
     active_organization_id: UUID | None = Field(
         default=None,
         foreign_key="organizations.id",
