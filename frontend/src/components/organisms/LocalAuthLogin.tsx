@@ -79,14 +79,12 @@ async function validateLocalToken(token: string): Promise<string | null> {
 
 type LocalAuthLoginProps = {
   onAuthenticated?: () => void;
-  onSwitchToRegister?: () => void;
 };
 
 const defaultOnAuthenticated = () => window.location.reload();
 
 export function LocalAuthLogin({
   onAuthenticated,
-  onSwitchToRegister,
 }: LocalAuthLoginProps) {
   const [tab, setTab] = useState<AuthTab>("email");
   const [email, setEmail] = useState("");
@@ -230,27 +228,16 @@ export function LocalAuthLogin({
               >
                 {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>
-              <div className="flex items-center justify-between text-xs text-muted">
-                <button
-                  type="button"
-                  className="underline hover:text-strong"
-                  onClick={() => {
-                    setError(null);
-                    setTab("token");
-                  }}
-                >
-                  Use access token instead
-                </button>
-                {onSwitchToRegister && (
-                  <button
-                    type="button"
-                    className="underline hover:text-strong"
-                    onClick={onSwitchToRegister}
-                  >
-                    Create account
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                className="text-xs text-muted underline hover:text-strong"
+                onClick={() => {
+                  setError(null);
+                  setTab("token");
+                }}
+              >
+                Use access token instead
+              </button>
             </form>
           ) : (
             <form onSubmit={handleTokenLogin} className="space-y-4">

@@ -11,6 +11,7 @@ import {
   Building2,
   LayoutGrid,
   Network,
+  Sparkles,
   Tags,
 } from "lucide-react";
 
@@ -192,6 +193,20 @@ export function DashboardSidebar() {
                 >
                   <Bot className="h-4 w-4" />
                   Agents
+                </Link>
+              ) : null}
+              {isAdmin ? (
+                <Link
+                  href="/skills"
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-slate-700 transition",
+                    pathname.startsWith("/skills")
+                      ? "bg-blue-100 text-blue-800 font-medium"
+                      : "hover:bg-slate-100",
+                  )}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Skills
                 </Link>
               ) : null}
             </div>

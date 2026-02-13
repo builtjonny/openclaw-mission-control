@@ -22,6 +22,7 @@ from app.db.pagination import paginate
 from app.db.session import get_session
 from app.models.agents import Agent
 from app.models.boards import Board
+from app.models.skills import Skill
 from app.models.tags import Tag
 from app.models.task_dependencies import TaskDependency
 from app.models.tasks import Task
@@ -46,12 +47,18 @@ from app.schemas.gateway_coordination import (
     GatewayMainAskUserResponse,
 )
 from app.schemas.pagination import DefaultLimitOffsetPage
+from app.schemas.skills import AgentSkillsUpdate, SkillRef
 from app.schemas.tags import TagRef
 from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
 from app.services.openclaw.coordination_service import GatewayCoordinationService
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
 from app.services.openclaw.provisioning_db import AgentLifecycleService
+from app.services.skills import (
+    load_skill_state,
+    replace_agent_skills,
+    validate_skill_ids,
+)
 from app.services.tags import replace_tags, validate_tag_ids
 from app.services.task_dependencies import (
     blocked_by_dependency_ids,
@@ -779,3 +786,109 @@ async def broadcast_gateway_lead_message(
         actor_agent=agent_ctx.agent,
         payload=payload,
     )
+
+
+# ---------------------------------------------------------------------------
+# Skill directory endpoints (agent-scoped)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills", response_model=list[SkillRef], tags=AGENT_BOARD_TAGS)
+async def list_skills(
+    board_id: UUID | None = BOARD_ID_QUERY,
+    q: str | None = None,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+) -> list[SkillRef]:
+    """Search/list skills available in the organization's skill directory.
+
+    Use returned ids when assigning skills to agents.
+    Provide `q` for keyword search, or omit for all skills.
+    """
+    # Resolve organization_id from the agent's board.
+    effective_board_id = board_id or agent_ctx.agent.board_id
+    if not effective_board_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="board_id is required for gateway-main agents.",
+        )
+    board = await get_board_or_404(effective_board_id, session)
+    _guard_board_access(agent_ctx, board)
+
+    statement = (
+        select(Skill)
+        .where(col(Skill.organization_id) == board.organization_id)
+    )
+    if q:
+        pattern = f"%{q}%"
+        statement = statement.where(
+            col(Skill.name).ilike(pattern) | col(Skill.summary).ilike(pattern)
+        )
+    statement = statement.order_by(
+        func.lower(col(Skill.name)).asc(),
+        col(Skill.created_at).asc(),
+    )
+    skills = (await session.exec(statement)).all()
+    return [
+        SkillRef(id=skill.id, name=skill.name, slug=skill.slug)
+        for skill in skills
+    ]
+
+
+@router.get(
+    "/boards/{board_id}/agents/{agent_id}/skills",
+    response_model=list[SkillRef],
+    tags=AGENT_BOARD_TAGS,
+)
+async def list_agent_skills(
+    agent_id: UUID,
+    board: Board = BOARD_DEP,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+) -> list[SkillRef]:
+    """List skills assigned to a specific agent on the board."""
+    _guard_board_access(agent_ctx, board)
+    state = await load_skill_state(session, agent_ids=[agent_id])
+    agent_state = state.get(agent_id)
+    return agent_state.skills if agent_state else []
+
+
+@router.put(
+    "/boards/{board_id}/agents/{agent_id}/skills",
+    response_model=list[SkillRef],
+    tags=AGENT_LEAD_TAGS,
+)
+async def update_agent_skills(
+    agent_id: UUID,
+    payload: AgentSkillsUpdate,
+    board: Board = BOARD_DEP,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+) -> list[SkillRef]:
+    """Replace all skill assignments for an agent (lead-only).
+
+    Validates skill IDs exist in the organization, replaces assignments,
+    and triggers re-provisioning to push skill files to the agent workspace.
+    """
+    _guard_board_access(agent_ctx, board)
+    _require_board_lead(agent_ctx)
+
+    target_agent = await Agent.objects.by_id(agent_id).first(session)
+    if target_agent is None or target_agent.board_id != board.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    validated_ids = await validate_skill_ids(
+        session,
+        organization_id=board.organization_id,
+        skill_ids=payload.skill_ids,
+    )
+    await replace_agent_skills(session, agent_id=agent_id, skill_ids=validated_ids)
+    await session.commit()
+
+    # Trigger re-provisioning so updated skill files reach the agent workspace.
+    lifecycle = AgentLifecycleService(session)
+    await lifecycle.reprovision_agent_skills(agent=target_agent)
+
+    state = await load_skill_state(session, agent_ids=[agent_id])
+    agent_state = state.get(agent_id)
+    return agent_state.skills if agent_state else []

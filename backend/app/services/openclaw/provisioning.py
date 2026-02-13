@@ -628,6 +628,7 @@ class BaseAgentLifecycleManager(ABC):
         options: ProvisionOptions,
         board: Board | None = None,
         session_label: str | None = None,
+        extra_files: dict[str, str] | None = None,
     ) -> None:
         if not self._gateway.workspace_root:
             msg = "gateway_workspace_root is required"
@@ -669,6 +670,10 @@ class BaseAgentLifecycleManager(ABC):
             include_bootstrap=include_bootstrap,
             template_overrides=self._template_overrides(),
         )
+
+        # Merge in extra files (e.g. skill instruction files) if provided.
+        if extra_files:
+            rendered.update(extra_files)
 
         await self._set_agent_files(
             agent_id=agent_id,
@@ -802,6 +807,7 @@ class OpenClawGatewayProvisioner:
         wake: bool = True,
         deliver_wakeup: bool = True,
         wakeup_verb: str | None = None,
+        extra_files: dict[str, str] | None = None,
     ) -> None:
         """Create/update an agent, sync all template files, and optionally wake the agent.
 
@@ -843,6 +849,7 @@ class OpenClawGatewayProvisioner:
             user=user,
             options=ProvisionOptions(action=action, force_bootstrap=force_bootstrap),
             session_label=agent.name or "Gateway Agent",
+            extra_files=extra_files,
         )
 
         if reset_session:

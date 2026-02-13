@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query
@@ -10,6 +10,7 @@ from sqlmodel import col
 
 from app.api.deps import require_org_admin
 from app.core.auth import AuthContext, get_auth_context
+from app.core.time import utcnow
 from app.db import crud
 from app.db.pagination import paginate
 from app.db.session import get_session
@@ -18,12 +19,17 @@ from app.models.gateways import Gateway
 from app.schemas.common import OkResponse
 from app.schemas.gateways import (
     GatewayCreate,
+    GatewayHeartbeatApply,
+    GatewayHeartbeatApplyResult,
     GatewayRead,
     GatewayTemplatesSyncResult,
     GatewayUpdate,
 )
 from app.schemas.pagination import DefaultLimitOffsetPage
 from app.services.openclaw.admin_service import GatewayAdminLifecycleService
+from app.services.openclaw.constants import DEFAULT_HEARTBEAT_CONFIG
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError
+from app.services.openclaw.provisioning import OpenClawGatewayProvisioner
 from app.services.openclaw.session_service import GatewayTemplateSyncQuery
 
 if TYPE_CHECKING:
@@ -146,6 +152,58 @@ async def sync_gateway_templates(
         organization_id=ctx.organization.id,
     )
     return await service.sync_templates(gateway, query=sync_query, auth=auth)
+
+
+@router.post("/{gateway_id}/heartbeat", response_model=GatewayHeartbeatApplyResult)
+async def apply_gateway_heartbeat(
+    gateway_id: UUID,
+    payload: GatewayHeartbeatApply,
+    session: AsyncSession = SESSION_DEP,
+    ctx: OrganizationContext = ORG_ADMIN_DEP,
+) -> GatewayHeartbeatApplyResult:
+    """Apply heartbeat frequency to all agents on a gateway."""
+    service = GatewayAdminLifecycleService(session)
+    gateway = await service.require_gateway(
+        gateway_id=gateway_id,
+        organization_id=ctx.organization.id,
+    )
+
+    agents = await Agent.objects.filter_by(gateway_id=gateway_id).all(session)
+    if not agents:
+        return GatewayHeartbeatApplyResult(
+            gateway_id=gateway_id,
+            every=payload.every,
+        )
+
+    updated_agent_ids: list[UUID] = []
+    for agent in agents:
+        raw = agent.heartbeat_config
+        heartbeat: dict[str, Any] = DEFAULT_HEARTBEAT_CONFIG.copy()
+        if isinstance(raw, dict):
+            heartbeat.update(raw)
+        heartbeat["every"] = payload.every
+        agent.heartbeat_config = heartbeat
+        agent.updated_at = utcnow()
+        session.add(agent)
+        updated_agent_ids.append(agent.id)
+
+    await session.commit()
+
+    failed_agent_ids: list[UUID] = []
+    try:
+        await OpenClawGatewayProvisioner().sync_gateway_agent_heartbeats(
+            gateway,
+            agents,
+        )
+    except OpenClawGatewayError:
+        failed_agent_ids = [a.id for a in agents]
+
+    return GatewayHeartbeatApplyResult(
+        gateway_id=gateway_id,
+        every=payload.every,
+        updated_agent_ids=updated_agent_ids,
+        failed_agent_ids=failed_agent_ids,
+    )
 
 
 @router.delete("/{gateway_id}", response_model=OkResponse)

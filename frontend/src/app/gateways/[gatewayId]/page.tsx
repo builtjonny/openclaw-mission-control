@@ -6,13 +6,20 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { useAuth } from "@/auth/clerk";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AgentsTable } from "@/components/agents/AgentsTable";
 import { DashboardPageLayout } from "@/components/templates/DashboardPageLayout";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-import { ApiError } from "@/api/mutator";
+import { ApiError, customFetch } from "@/api/mutator";
 import {
   type listBoardsApiV1BoardsGetResponse,
   useListBoardsApiV1BoardsGet,
@@ -33,6 +40,19 @@ import { type AgentRead } from "@/api/generated/model";
 import { formatTimestamp } from "@/lib/formatters";
 import { createOptimisticListDeleteMutation } from "@/lib/list-delete";
 import { useOrganizationMembership } from "@/lib/use-organization-membership";
+
+const HEARTBEAT_FREQUENCY_OPTIONS = [
+  { value: "10m", label: "Every 10 minutes" },
+  { value: "1h", label: "Every 1 hour" },
+  { value: "1d", label: "Every 1 day" },
+  { value: "30d", label: "Every 30 days" },
+] as const;
+
+const applyGatewayHeartbeat = (gatewayId: string, every: string) =>
+  customFetch<{ data: unknown; status: number }>(
+    `/api/v1/gateways/${gatewayId}/heartbeat`,
+    { method: "POST", body: JSON.stringify({ every }) },
+  );
 
 const maskToken = (value?: string | null) => {
   if (!value) return "—";
@@ -111,6 +131,18 @@ export default function GatewayDetailPage() {
     queryClient,
   );
 
+  const heartbeatMutation = useMutation<
+    unknown,
+    ApiError,
+    { gatewayId: string; every: string }
+  >({
+    mutationFn: ({ gatewayId, every }) =>
+      applyGatewayHeartbeat(gatewayId, every),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentsKey });
+    },
+  });
+
   const statusParams = gateway
     ? {
         gateway_url: gateway.url,
@@ -142,6 +174,17 @@ export default function GatewayDetailPage() {
         : [],
     [boardsQuery.data],
   );
+
+  const currentHeartbeatEvery = useMemo(() => {
+    if (agents.length === 0) return null;
+    const values = new Set(
+      agents.map((a) => {
+        const config = a.heartbeat_config as Record<string, unknown> | null;
+        return typeof config?.every === "string" ? config.every : "10m";
+      }),
+    );
+    return values.size === 1 ? [...values][0] : null;
+  }, [agents]);
 
   const status =
     statusQuery.data?.status === 200 ? statusQuery.data.data : null;
@@ -247,6 +290,55 @@ export default function GatewayDetailPage() {
                     <p className="mt-1 text-sm font-medium text-slate-900">
                       {gateway.workspace_root}
                     </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-slate-400">
+                      Heartbeat frequency
+                    </p>
+                    <div className="mt-1">
+                      <Select
+                        value={currentHeartbeatEvery ?? ""}
+                        onValueChange={(value) => {
+                          if (!gatewayId) return;
+                          heartbeatMutation.mutate({
+                            gatewayId,
+                            every: value,
+                          });
+                        }}
+                        disabled={
+                          heartbeatMutation.isPending ||
+                          agents.length === 0
+                        }
+                      >
+                        <SelectTrigger className="w-48">
+                          <SelectValue
+                            placeholder={
+                              agents.length === 0
+                                ? "No agents"
+                                : currentHeartbeatEvery === null
+                                  ? "Mixed"
+                                  : "Select frequency"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HEARTBEAT_FREQUENCY_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {heartbeatMutation.isPending ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Updating…
+                        </p>
+                      ) : heartbeatMutation.error ? (
+                        <p className="mt-1 text-xs text-rose-600">
+                          {heartbeatMutation.error.message}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>

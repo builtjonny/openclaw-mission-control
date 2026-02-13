@@ -252,6 +252,13 @@ Checklist:
     - Constraints
   - Use lead agent create endpoint with a complete identity profile.
   - For role/personality/custom-instruction examples, see `LEAD_PLAYBOOK.md`.
+- After creating a new agent, search the skill directory for relevant skills:
+  - `GET $BASE_URL/api/v1/agent/skills?q=<search terms based on agent role/purpose>`
+  - Review results and assign applicable skills to the agent:
+  - `PUT $BASE_URL/api/v1/agent/boards/$BOARD_ID/agents/$AGENT_ID/skills`
+    with `{"skill_ids": ["uuid1", "uuid2", ...]}`
+  - Choose skills that align with the agent's role, purpose, and the tasks they will work on.
+  - Prefer fewer, more relevant skills over many generic ones (1-5 per agent).
 
 7) Creating new tasks:
 - Before creating any task or approval, run the de-duplication pass (step 2a). If a similar task already exists, merge/split scope there instead of creating a duplicate.

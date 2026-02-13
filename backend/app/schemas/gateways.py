@@ -85,3 +85,18 @@ class GatewayTemplatesSyncResult(SQLModel):
     agents_skipped: int
     main_updated: bool
     errors: list[GatewayTemplatesSyncError] = Field(default_factory=list)
+
+
+class GatewayHeartbeatApply(SQLModel):
+    """Request payload for gateway-wide heartbeat frequency updates."""
+
+    every: str
+
+
+class GatewayHeartbeatApplyResult(SQLModel):
+    """Result payload from a gateway heartbeat update."""
+
+    gateway_id: UUID
+    every: str
+    updated_agent_ids: list[UUID] = Field(default_factory=list)
+    failed_agent_ids: list[UUID] = Field(default_factory=list)

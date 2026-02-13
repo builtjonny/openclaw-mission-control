@@ -11,6 +11,7 @@ from pydantic import field_validator
 from sqlmodel import SQLModel
 
 from app.schemas.common import NonEmptyStr
+from app.schemas.skills import SkillRef
 
 _RUNTIME_TYPE_REFERENCES = (datetime, UUID, NonEmptyStr)
 
@@ -74,6 +75,8 @@ class AgentBase(SQLModel):
 class AgentCreate(AgentBase):
     """Payload for creating a new agent."""
 
+    skill_ids: list[UUID] | None = None
+
 
 class AgentUpdate(SQLModel):
     """Payload for patching an existing agent."""
@@ -86,6 +89,7 @@ class AgentUpdate(SQLModel):
     identity_profile: dict[str, Any] | None = None
     identity_template: str | None = None
     soul_template: str | None = None
+    skill_ids: list[UUID] | None = None
 
     @field_validator("identity_template", "soul_template", mode="before")
     @classmethod
@@ -117,6 +121,7 @@ class AgentRead(AgentBase):
     is_gateway_main: bool = False
     openclaw_session_id: str | None = None
     last_seen_at: datetime | None
+    skills: list[SkillRef] = []
     created_at: datetime
     updated_at: datetime
 

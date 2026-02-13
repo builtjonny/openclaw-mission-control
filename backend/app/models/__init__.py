@@ -1,6 +1,7 @@
 """Model exports for SQLAlchemy/SQLModel metadata discovery."""
 
 from app.models.activity_events import ActivityEvent
+from app.models.agent_skills import AgentSkill
 from app.models.agents import Agent
 from app.models.approval_task_links import ApprovalTaskLink
 from app.models.approvals import Approval
@@ -17,6 +18,7 @@ from app.models.organization_invite_board_access import OrganizationInviteBoardA
 from app.models.organization_invites import OrganizationInvite
 from app.models.organization_members import OrganizationMember
 from app.models.organizations import Organization
+from app.models.skills import Skill
 from app.models.tag_assignments import TagAssignment
 from app.models.tags import Tag
 from app.models.task_dependencies import TaskDependency
@@ -26,6 +28,7 @@ from app.models.users import User
 
 __all__ = [
     "ActivityEvent",
+    "AgentSkill",
     "Agent",
     "ApprovalTaskLink",
     "Approval",
@@ -45,6 +48,7 @@ __all__ = [
     "TaskDependency",
     "Task",
     "TaskFingerprint",
+    "Skill",
     "Tag",
     "TagAssignment",
     "User",

@@ -17,7 +17,16 @@ import {
   type listBoardsApiV1BoardsGetResponse,
   useListBoardsApiV1BoardsGet,
 } from "@/api/generated/boards/boards";
-import type { AgentRead, AgentUpdate, BoardRead } from "@/api/generated/model";
+import {
+  type listSkillsApiV1SkillsGetResponse,
+  useListSkillsApiV1SkillsGet,
+} from "@/api/generated/skills/skills";
+import type {
+  AgentRead,
+  AgentUpdate,
+  BoardRead,
+  SkillRead,
+} from "@/api/generated/model";
 import { DashboardPageLayout } from "@/components/templates/DashboardPageLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,7 +133,24 @@ export default function EditAgentPage() {
   const [soulTemplate, setSoulTemplate] = useState<string | undefined>(
     undefined,
   );
+  const [selectedSkillIds, setSelectedSkillIds] = useState<
+    Set<string> | undefined
+  >(undefined);
   const [error, setError] = useState<string | null>(null);
+
+  const skillsQuery = useListSkillsApiV1SkillsGet<
+    listSkillsApiV1SkillsGetResponse,
+    ApiError
+  >(undefined, {
+    query: {
+      enabled: Boolean(isSignedIn),
+      refetchOnMount: "always",
+    },
+  });
+  const availableSkills: SkillRead[] =
+    skillsQuery.data?.status === 200
+      ? (skillsQuery.data.data.items ?? [])
+      : [];
 
   const boardsQuery = useListBoardsApiV1BoardsGet<
     listBoardsApiV1BoardsGetResponse,
@@ -220,6 +246,16 @@ export default function EditAgentPage() {
     return boardId ?? loadedAgent?.board_id ?? boards[0]?.id ?? "";
   }, [boardId, boards, loadedAgent?.board_id, resolvedIsGatewayMain]);
 
+  const resolvedSkillIds = useMemo(() => {
+    if (selectedSkillIds !== undefined) return selectedSkillIds;
+    const agentSkills = (loadedAgent as Record<string, unknown> | null)
+      ?.skills as Array<{ id: string }> | undefined;
+    if (agentSkills && Array.isArray(agentSkills)) {
+      return new Set(agentSkills.map((s) => s.id));
+    }
+    return new Set<string>();
+  }, [selectedSkillIds, loadedAgent]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isSignedIn || !agentId || !loadedAgent) return;
@@ -275,6 +311,9 @@ export default function EditAgentPage() {
     }
     if (Boolean(loadedAgent.is_gateway_main) !== resolvedIsGatewayMain) {
       payload.is_gateway_main = resolvedIsGatewayMain;
+    }
+    if (selectedSkillIds !== undefined) {
+      payload.skill_ids = Array.from(resolvedSkillIds);
     }
 
     updateMutation.mutate({ agentId, params: { force: true }, data: payload });
@@ -468,6 +507,54 @@ export default function EditAgentPage() {
             </div>
           </div>
         </div>
+
+        {availableSkills.length > 0 ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Skills
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Select skills to assign to this agent. Skill instructions are
+              delivered as SKILL_*.md files.
+            </p>
+            <div className="mt-4 max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
+              {availableSkills.map((skill) => (
+                <label
+                  key={skill.id}
+                  className="flex items-start gap-3 text-sm text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+                    checked={resolvedSkillIds.has(skill.id)}
+                    onChange={(event) => {
+                      setSelectedSkillIds(() => {
+                        const next = new Set(resolvedSkillIds);
+                        if (event.target.checked) {
+                          next.add(skill.id);
+                        } else {
+                          next.delete(skill.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={isLoading}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-800">
+                      {skill.name}
+                    </span>
+                    {skill.summary ? (
+                      <span className="ml-1 text-xs text-slate-500">
+                        - {skill.summary}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">

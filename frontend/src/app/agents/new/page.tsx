@@ -13,8 +13,12 @@ import {
   useListBoardsApiV1BoardsGet,
 } from "@/api/generated/boards/boards";
 import { useCreateAgentApiV1AgentsPost } from "@/api/generated/agents/agents";
+import {
+  type listSkillsApiV1SkillsGetResponse,
+  useListSkillsApiV1SkillsGet,
+} from "@/api/generated/skills/skills";
 import { useOrganizationMembership } from "@/lib/use-organization-membership";
-import type { BoardRead } from "@/api/generated/model";
+import type { BoardRead, SkillRead } from "@/api/generated/model";
 import { DashboardPageLayout } from "@/components/templates/DashboardPageLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,7 +94,24 @@ export default function NewAgentPage() {
     ...DEFAULT_IDENTITY_PROFILE,
   });
   const [soulTemplate, setSoulTemplate] = useState(DEFAULT_SOUL_TEMPLATE);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [error, setError] = useState<string | null>(null);
+
+  const skillsQuery = useListSkillsApiV1SkillsGet<
+    listSkillsApiV1SkillsGetResponse,
+    ApiError
+  >(undefined, {
+    query: {
+      enabled: Boolean(isSignedIn && isAdmin),
+      refetchOnMount: "always",
+    },
+  });
+  const availableSkills: SkillRead[] =
+    skillsQuery.data?.status === 200
+      ? (skillsQuery.data.data.items ?? [])
+      : [];
 
   const boardsQuery = useListBoardsApiV1BoardsGet<
     listBoardsApiV1BoardsGetResponse,
@@ -148,6 +169,8 @@ export default function NewAgentPage() {
           identityProfile,
         ) as unknown as Record<string, unknown> | null,
         soul_template: soulTemplate.trim() || null,
+        skill_ids:
+          selectedSkillIds.size > 0 ? Array.from(selectedSkillIds) : undefined,
       },
     });
   };
@@ -289,6 +312,54 @@ export default function NewAgentPage() {
             </div>
           </div>
         </div>
+
+        {availableSkills.length > 0 ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Skills
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Select skills to assign to this agent. Skill instructions are
+              delivered as SKILL_*.md files.
+            </p>
+            <div className="mt-4 max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
+              {availableSkills.map((skill) => (
+                <label
+                  key={skill.id}
+                  className="flex items-start gap-3 text-sm text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+                    checked={selectedSkillIds.has(skill.id)}
+                    onChange={(event) => {
+                      setSelectedSkillIds((prev) => {
+                        const next = new Set(prev);
+                        if (event.target.checked) {
+                          next.add(skill.id);
+                        } else {
+                          next.delete(skill.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={isLoading}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-800">
+                      {skill.name}
+                    </span>
+                    {skill.summary ? (
+                      <span className="ml-1 text-xs text-slate-500">
+                        - {skill.summary}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">

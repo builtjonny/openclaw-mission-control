@@ -73,6 +73,7 @@ from app.services.openclaw.internal.session_keys import (
     board_lead_session_key,
 )
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
+from app.services.skills import get_skill_instructions
 from app.services.openclaw.provisioning import (
     OpenClawGatewayControlPlane,
     OpenClawGatewayProvisioner,
@@ -982,6 +983,7 @@ class AgentLifecycleService(OpenClawDBService):
         wakeup_verb: str,
         force_bootstrap: bool,
         raise_gateway_errors: bool,
+        extra_files: dict[str, str] | None = None,
     ) -> None:
         self.logger.log(
             TRACE_LEVEL,
@@ -1022,6 +1024,7 @@ class AgentLifecycleService(OpenClawDBService):
                 wake=True,
                 deliver_wakeup=True,
                 wakeup_verb=wakeup_verb,
+                extra_files=extra_files,
             )
             mark_provision_complete(agent, status="online", clear_confirm_token=True)
             self.session.add(agent)
@@ -1083,6 +1086,16 @@ class AgentLifecycleService(OpenClawDBService):
                     detail=f"Unexpected error {action}ing agent provisioning.",
                 ) from exc
 
+    async def _build_skill_extra_files(self, agent: Agent) -> dict[str, str] | None:
+        """Load assigned skill instructions and return as workspace file dict."""
+        skill_entries = await get_skill_instructions(self.session, agent_id=agent.id)
+        if not skill_entries:
+            return None
+        return {
+            f"SKILL_{slug.upper().replace('-', '_')}.md": instructions
+            for slug, instructions in skill_entries
+        }
+
     async def provision_new_agent(
         self,
         *,
@@ -1093,6 +1106,7 @@ class AgentLifecycleService(OpenClawDBService):
         user: User | None,
         force_bootstrap: bool,
     ) -> None:
+        extra_files = await self._build_skill_extra_files(agent)
         await self._apply_gateway_provisioning(
             agent=agent,
             target=AgentUpdateProvisionTarget(is_main_agent=False, board=board, gateway=gateway),
@@ -1102,6 +1116,7 @@ class AgentLifecycleService(OpenClawDBService):
             wakeup_verb="provisioned",
             force_bootstrap=force_bootstrap,
             raise_gateway_errors=True,
+            extra_files=extra_files,
         )
 
     async def validate_agent_update_inputs(
@@ -1252,6 +1267,7 @@ class AgentLifecycleService(OpenClawDBService):
         agent: Agent,
         request: AgentUpdateProvisionRequest,
     ) -> None:
+        extra_files = await self._build_skill_extra_files(agent)
         await self._apply_gateway_provisioning(
             agent=agent,
             target=request.target,
@@ -1261,7 +1277,43 @@ class AgentLifecycleService(OpenClawDBService):
             wakeup_verb="updated",
             force_bootstrap=request.force_bootstrap,
             raise_gateway_errors=True,
+            extra_files=extra_files,
         )
+
+    async def reprovision_agent_skills(self, *, agent: Agent) -> None:
+        """Re-provision just the skill files for an agent without full update cycle.
+
+        Used when skills are assigned/removed via the agent-scoped API.
+        Falls back to a lenient approach (no error raised if gateway is unavailable).
+        """
+        extra_files = await self._build_skill_extra_files(agent)
+        if not extra_files:
+            return
+
+        board = await self.session.get(Board, agent.board_id) if agent.board_id else None
+        gateway = await self.session.get(Gateway, agent.gateway_id)
+        if gateway is None or not gateway.url:
+            return
+
+        from app.services.openclaw.provisioning import (
+            _control_plane_for_gateway,
+        )
+
+        control_plane = _control_plane_for_gateway(gateway)
+        agent_id = _agent_key(agent)
+        for name, content in extra_files.items():
+            try:
+                await control_plane.set_agent_file(
+                    agent_id=agent_id,
+                    name=name,
+                    content=content,
+                )
+            except OpenClawGatewayError:
+                self.logger.warning(
+                    "agent.skill_reprovision.file_failed agent_id=%s file=%s",
+                    agent.id,
+                    name,
+                )
 
     @staticmethod
     def heartbeat_lookup_statement(payload: AgentHeartbeatCreate) -> SelectOfScalar[Agent]:
@@ -1485,7 +1537,8 @@ class AgentLifecycleService(OpenClawDBService):
             write=actor.actor_type == "user",
         )
         gateway, _client_config = await self.require_gateway(board)
-        data = payload.model_dump()
+        skill_ids = payload.skill_ids
+        data = payload.model_dump(exclude={"skill_ids"})
         data["gateway_id"] = gateway.id
         requested_name = (data.get("name") or "").strip()
         await self.ensure_unique_agent_name(
@@ -1494,6 +1547,21 @@ class AgentLifecycleService(OpenClawDBService):
             requested_name=requested_name,
         )
         agent, raw_token = await self.persist_new_agent(data=data)
+
+        # Assign skills if provided.
+        if skill_ids:
+            from app.services.skills import replace_agent_skills, validate_skill_ids
+
+            validated = await validate_skill_ids(
+                self.session,
+                organization_id=board.organization_id,
+                skill_ids=skill_ids,
+            )
+            await replace_agent_skills(
+                self.session, agent_id=agent.id, skill_ids=validated
+            )
+            await self.session.flush()
+
         await self.provision_new_agent(
             agent=agent,
             board=board,
@@ -1535,14 +1603,28 @@ class AgentLifecycleService(OpenClawDBService):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         await self.require_agent_access(agent=agent, ctx=options.context, write=True)
         updates = payload.model_dump(exclude_unset=True)
+        skill_ids = updates.pop("skill_ids", None)
         make_main = updates.pop("is_gateway_main", None)
         await self.validate_agent_update_inputs(
             ctx=options.context,
             updates=updates,
             make_main=make_main,
         )
-        if not updates and not options.force and make_main is None:
+        if not updates and not options.force and make_main is None and skill_ids is None:
             return self.to_agent_read(self.with_computed_status(agent))
+
+        # Apply skill assignment changes if provided.
+        if skill_ids is not None:
+            from app.services.skills import replace_agent_skills, validate_skill_ids
+
+            org_id = options.context.organization.id
+            validated = await validate_skill_ids(
+                self.session, organization_id=org_id, skill_ids=skill_ids
+            )
+            await replace_agent_skills(
+                self.session, agent_id=agent.id, skill_ids=validated
+            )
+
         main_gateway, gateway_for_main = await self.apply_agent_update_mutations(
             agent=agent,
             updates=updates,

@@ -24,6 +24,7 @@ from app.api.gateway import router as gateway_router
 from app.api.gateways import router as gateways_router
 from app.api.metrics import router as metrics_router
 from app.api.organizations import router as organizations_router
+from app.api.skills import router as skills_router
 from app.api.souls_directory import router as souls_directory_router
 from app.api.tags import router as tags_router
 from app.api.tasks import router as tasks_router
@@ -145,6 +146,7 @@ api_v1.include_router(board_webhooks_router)
 api_v1.include_router(board_onboarding_router)
 api_v1.include_router(approvals_router)
 api_v1.include_router(tasks_router)
+api_v1.include_router(skills_router)
 api_v1.include_router(tags_router)
 api_v1.include_router(users_router)
 app.include_router(api_v1)
