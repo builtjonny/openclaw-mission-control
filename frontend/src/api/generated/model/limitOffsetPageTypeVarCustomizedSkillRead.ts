@@ -4,10 +4,10 @@
  * Mission Control API
  * OpenAPI spec version: 0.1.0
  */
-import type { BoardWebhookPayloadRead } from "./boardWebhookPayloadRead";
+import type { SkillRead } from "./skillRead";
 
-export interface LimitOffsetPageTypeVarCustomizedBoardWebhookPayloadRead {
-  items: BoardWebhookPayloadRead[];
+export interface LimitOffsetPageTypeVarCustomizedSkillRead {
+  items: SkillRead[];
   /** @minimum 0 */
   total: number;
   /** @minimum 1 */

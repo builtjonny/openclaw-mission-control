@@ -23,6 +23,8 @@ import type {
 import type {
   GatewayCommandsResponse,
   GatewayCreate,
+  GatewayHeartbeatApply,
+  GatewayHeartbeatApplyResult,
   GatewayRead,
   GatewaySessionHistoryResponse,
   GatewaySessionMessageRequest,
@@ -2427,6 +2429,160 @@ export const useSyncGatewayTemplatesApiV1GatewaysGatewayIdTemplatesSyncPost = <
 > => {
   return useMutation(
     getSyncGatewayTemplatesApiV1GatewaysGatewayIdTemplatesSyncPostMutationOptions(
+      options,
+    ),
+    queryClient,
+  );
+};
+/**
+ * Apply heartbeat frequency to all agents on a gateway.
+ * @summary Apply Gateway Heartbeat
+ */
+export type applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse200 =
+  {
+    data: GatewayHeartbeatApplyResult;
+    status: 200;
+  };
+
+export type applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse422 =
+  {
+    data: HTTPValidationError;
+    status: 422;
+  };
+
+export type applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponseSuccess =
+  applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse200 & {
+    headers: Headers;
+  };
+export type applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponseError =
+  applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse422 & {
+    headers: Headers;
+  };
+
+export type applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse =
+  | applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponseSuccess
+  | applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponseError;
+
+export const getApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostUrl = (
+  gatewayId: string,
+) => {
+  return `/api/v1/gateways/${gatewayId}/heartbeat`;
+};
+
+export const applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost = async (
+  gatewayId: string,
+  gatewayHeartbeatApply: GatewayHeartbeatApply,
+  options?: RequestInit,
+): Promise<applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse> => {
+  return customFetch<applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostResponse>(
+    getApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostUrl(gatewayId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(gatewayHeartbeatApply),
+    },
+  );
+};
+
+export const getApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostMutationOptions =
+  <TError = HTTPValidationError, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<
+          typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost
+        >
+      >,
+      TError,
+      { gatewayId: string; data: GatewayHeartbeatApply },
+      TContext
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<
+        typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost
+      >
+    >,
+    TError,
+    { gatewayId: string; data: GatewayHeartbeatApply },
+    TContext
+  > => {
+    const mutationKey = [
+      "applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost",
+    ];
+    const { mutation: mutationOptions, request: requestOptions } = options
+      ? options.mutation &&
+        "mutationKey" in options.mutation &&
+        options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey }, request: undefined };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<
+          typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost
+        >
+      >,
+      { gatewayId: string; data: GatewayHeartbeatApply }
+    > = (props) => {
+      const { gatewayId, data } = props ?? {};
+
+      return applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost(
+        gatewayId,
+        data,
+        requestOptions,
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type ApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostMutationResult =
+  NonNullable<
+    Awaited<
+      ReturnType<
+        typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost
+      >
+    >
+  >;
+export type ApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostMutationBody =
+  GatewayHeartbeatApply;
+export type ApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostMutationError =
+  HTTPValidationError;
+
+/**
+ * @summary Apply Gateway Heartbeat
+ */
+export const useApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<
+          typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost
+        >
+      >,
+      TError,
+      { gatewayId: string; data: GatewayHeartbeatApply },
+      TContext
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<
+    ReturnType<typeof applyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPost>
+  >,
+  TError,
+  { gatewayId: string; data: GatewayHeartbeatApply },
+  TContext
+> => {
+  return useMutation(
+    getApplyGatewayHeartbeatApiV1GatewaysGatewayIdHeartbeatPostMutationOptions(
       options,
     ),
     queryClient,

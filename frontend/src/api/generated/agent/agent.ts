@@ -25,6 +25,7 @@ import type {
   AgentHeartbeatCreate,
   AgentNudge,
   AgentRead,
+  AgentSkillsUpdate,
   ApprovalCreate,
   ApprovalRead,
   BoardMemoryCreate,
@@ -50,9 +51,11 @@ import type {
   ListApprovalsApiV1AgentBoardsBoardIdApprovalsGetParams,
   ListBoardMemoryApiV1AgentBoardsBoardIdMemoryGetParams,
   ListBoardsApiV1AgentBoardsGetParams,
+  ListSkillsApiV1AgentSkillsGetParams,
   ListTaskCommentsApiV1AgentBoardsBoardIdTasksTaskIdCommentsGetParams,
   ListTasksApiV1AgentBoardsBoardIdTasksGetParams,
   OkResponse,
+  SkillRef,
   SoulUpdateRequest,
   TagRef,
   TaskCommentCreate,
@@ -68,6 +71,9 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
  * List boards visible to the authenticated agent.
+
+Board-scoped agents typically see only their assigned board.
+Main agents may see multiple boards when permitted by auth scope.
  * @summary List Boards
  */
 export type listBoardsApiV1AgentBoardsGetResponse200 = {
@@ -278,7 +284,10 @@ export function useListBoardsApiV1AgentBoardsGet<
 }
 
 /**
- * Return a board if the authenticated agent can access it.
+ * Return one board if the authenticated agent can access it.
+
+Use this when an agent needs board metadata (objective, status, target date)
+before planning or posting updates.
  * @summary Get Board
  */
 export type getBoardApiV1AgentBoardsBoardIdGetResponse200 = {
@@ -481,7 +490,9 @@ export function useGetBoardApiV1AgentBoardsBoardIdGet<
 }
 
 /**
- * List agents, optionally filtered to a board.
+ * List agents visible to the caller, optionally filtered by board.
+
+Useful for lead delegation and workload balancing.
  * @summary List Agents
  */
 export type listAgentsApiV1AgentAgentsGetResponse200 = {
@@ -692,7 +703,9 @@ export function useListAgentsApiV1AgentAgentsGet<
 }
 
 /**
- * Create an agent on the caller's board.
+ * Create a new board agent as lead.
+
+The new agent is always forced onto the caller's board (`board_id` override).
  * @summary Create Agent
  */
 export type createAgentApiV1AgentAgentsPostResponse200 = {
@@ -810,7 +823,11 @@ export const useCreateAgentApiV1AgentAgentsPost = <
   );
 };
 /**
- * List tasks on a board with optional status and assignment filters.
+ * List tasks on a board with status/assignment filters.
+
+Common patterns:
+- worker: fetch assigned inbox/in-progress tasks
+- lead: fetch unassigned inbox tasks for delegation
  * @summary List Tasks
  */
 export type listTasksApiV1AgentBoardsBoardIdTasksGetResponse200 = {
@@ -1043,7 +1060,10 @@ export function useListTasksApiV1AgentBoardsBoardIdTasksGet<
 }
 
 /**
- * Create a task on the board as the lead agent.
+ * Create a task as the board lead.
+
+Lead-only endpoint. Supports dependency-aware creation via
+`depends_on_task_ids` and optional `tag_ids`.
  * @summary Create Task
  */
 export type createTaskApiV1AgentBoardsBoardIdTasksPostResponse200 = {
@@ -1170,7 +1190,9 @@ export const useCreateTaskApiV1AgentBoardsBoardIdTasksPost = <
   );
 };
 /**
- * List tags available to the board's organization.
+ * List available tags for the board's organization.
+
+Use returned ids in task create/update payloads (`tag_ids`).
  * @summary List Tags
  */
 export type listTagsApiV1AgentBoardsBoardIdTagsGetResponse200 = {
@@ -1379,7 +1401,9 @@ export function useListTagsApiV1AgentBoardsBoardIdTagsGet<
 }
 
 /**
- * Update a task after board-level access checks.
+ * Update a task after board-level authorization checks.
+
+Supports status, assignment, dependencies, and optional inline comment.
  * @summary Update Task
  */
 export type updateTaskApiV1AgentBoardsBoardIdTasksTaskIdPatchResponse200 = {
@@ -1520,7 +1544,9 @@ export const useUpdateTaskApiV1AgentBoardsBoardIdTasksTaskIdPatch = <
   );
 };
 /**
- * List comments for a task visible to the authenticated agent.
+ * List task comments visible to the authenticated agent.
+
+Read this before posting updates to avoid duplicate or low-value comments.
  * @summary List Task Comments
  */
 export type listTaskCommentsApiV1AgentBoardsBoardIdTasksTaskIdCommentsGetResponse200 =
@@ -1854,7 +1880,9 @@ export function useListTaskCommentsApiV1AgentBoardsBoardIdTasksTaskIdCommentsGet
 }
 
 /**
- * Create a task comment on behalf of the authenticated agent.
+ * Create a task comment as the authenticated agent.
+
+This is the primary collaboration/log surface for task progress.
  * @summary Create Task Comment
  */
 export type createTaskCommentApiV1AgentBoardsBoardIdTasksTaskIdCommentsPostResponse200 =
@@ -2014,7 +2042,9 @@ export const useCreateTaskCommentApiV1AgentBoardsBoardIdTasksTaskIdCommentsPost 
     );
   };
 /**
- * List board memory entries with optional chat filtering.
+ * List board memory with optional chat filtering.
+
+Use `is_chat=false` for durable context and `is_chat=true` for board chat.
  * @summary List Board Memory
  */
 export type listBoardMemoryApiV1AgentBoardsBoardIdMemoryGetResponse200 = {
@@ -2278,6 +2308,8 @@ export function useListBoardMemoryApiV1AgentBoardsBoardIdMemoryGet<
 
 /**
  * Create a board memory entry.
+
+Use tags to indicate purpose (e.g. `chat`, `decision`, `plan`, `handoff`).
  * @summary Create Board Memory
  */
 export type createBoardMemoryApiV1AgentBoardsBoardIdMemoryPostResponse200 = {
@@ -2418,6 +2450,8 @@ export const useCreateBoardMemoryApiV1AgentBoardsBoardIdMemoryPost = <
 };
 /**
  * List approvals for a board.
+
+Use status filtering to process pending approvals efficiently.
  * @summary List Approvals
  */
 export type listApprovalsApiV1AgentBoardsBoardIdApprovalsGetResponse200 = {
@@ -2685,7 +2719,9 @@ export function useListApprovalsApiV1AgentBoardsBoardIdApprovalsGet<
 }
 
 /**
- * Create a board approval request.
+ * Create an approval request for risky or low-confidence actions.
+
+Include `task_id` or `task_ids` to scope the decision precisely.
  * @summary Create Approval
  */
 export type createApprovalApiV1AgentBoardsBoardIdApprovalsPostResponse200 = {
@@ -2825,7 +2861,9 @@ export const useCreateApprovalApiV1AgentBoardsBoardIdApprovalsPost = <
   );
 };
 /**
- * Apply onboarding updates for a board.
+ * Apply board onboarding updates from an agent workflow.
+
+Used during structured objective/success-metric intake loops.
  * @summary Update Onboarding
  */
 export type updateOnboardingApiV1AgentBoardsBoardIdOnboardingPostResponse200 = {
@@ -2987,7 +3025,9 @@ export const useUpdateOnboardingApiV1AgentBoardsBoardIdOnboardingPost = <
   );
 };
 /**
- * Send a direct nudge message to a board agent.
+ * Send a direct nudge to one board agent.
+
+Lead-only endpoint for stale or blocked in-progress work.
  * @summary Nudge Agent
  */
 export type nudgeAgentApiV1AgentBoardsBoardIdAgentsAgentIdNudgePostResponse200 =
@@ -3144,6 +3184,8 @@ export const useNudgeAgentApiV1AgentBoardsBoardIdAgentsAgentIdNudgePost = <
 };
 /**
  * Record heartbeat status for the authenticated agent.
+
+Heartbeats are identity-bound to the token's agent id.
  * @summary Agent Heartbeat
  */
 export type agentHeartbeatApiV1AgentHeartbeatPostResponse200 = {
@@ -3263,7 +3305,9 @@ export const useAgentHeartbeatApiV1AgentHeartbeatPost = <
   );
 };
 /**
- * Fetch the target agent's SOUL.md content from the gateway.
+ * Fetch an agent's SOUL.md content.
+
+Allowed for board lead, or for an agent reading its own SOUL.
  * @summary Get Agent Soul
  */
 export type getAgentSoulApiV1AgentBoardsBoardIdAgentsAgentIdSoulGetResponse200 =
@@ -3547,7 +3591,9 @@ export function useGetAgentSoulApiV1AgentBoardsBoardIdAgentsAgentIdSoulGet<
 }
 
 /**
- * Update an agent's SOUL.md content in DB and gateway.
+ * Update an agent's SOUL.md template in DB and gateway.
+
+Lead-only endpoint. Persists as `soul_template` for future reprovisioning.
  * @summary Update Agent Soul
  */
 export type updateAgentSoulApiV1AgentBoardsBoardIdAgentsAgentIdSoulPutResponse200 =
@@ -3708,7 +3754,9 @@ export const useUpdateAgentSoulApiV1AgentBoardsBoardIdAgentsAgentIdSoulPut = <
   );
 };
 /**
- * Delete a board agent as the board lead.
+ * Delete a board agent as board lead.
+
+Cleans up runtime/session state through lifecycle services.
  * @summary Delete Board Agent
  */
 export type deleteBoardAgentApiV1AgentBoardsBoardIdAgentsAgentIdDeleteResponse200 =
@@ -3864,7 +3912,9 @@ export const useDeleteBoardAgentApiV1AgentBoardsBoardIdAgentsAgentIdDelete = <
   );
 };
 /**
- * Route a lead's ask-user request through the dedicated gateway agent.
+ * Ask the human via gateway-main external channels.
+
+Lead-only endpoint for situations where board chat is not responsive.
  * @summary Ask User Via Gateway Main
  */
 export type askUserViaGatewayMainApiV1AgentBoardsBoardIdGatewayMainAskUserPostResponse200 =
@@ -4021,7 +4071,7 @@ export const useAskUserViaGatewayMainApiV1AgentBoardsBoardIdGatewayMainAskUserPo
     );
   };
 /**
- * Send a gateway-main message to a single board lead agent.
+ * Send a gateway-main control message to one board lead.
  * @summary Message Gateway Board Lead
  */
 export type messageGatewayBoardLeadApiV1AgentGatewayBoardsBoardIdLeadMessagePostResponse200 =
@@ -4178,7 +4228,7 @@ export const useMessageGatewayBoardLeadApiV1AgentGatewayBoardsBoardIdLeadMessage
     );
   };
 /**
- * Broadcast a gateway-main message to multiple board leads.
+ * Broadcast a gateway-main control message to multiple board leads.
  * @summary Broadcast Gateway Lead Message
  */
 export type broadcastGatewayLeadMessageApiV1AgentGatewayLeadsBroadcastPostResponse200 =
@@ -4325,6 +4375,681 @@ export const useBroadcastGatewayLeadMessageApiV1AgentGatewayLeadsBroadcastPost =
   > => {
     return useMutation(
       getBroadcastGatewayLeadMessageApiV1AgentGatewayLeadsBroadcastPostMutationOptions(
+        options,
+      ),
+      queryClient,
+    );
+  };
+/**
+ * Search/list skills available in the organization's skill directory.
+
+Use returned ids when assigning skills to agents.
+Provide `q` for keyword search, or omit for all skills.
+ * @summary List Skills
+ */
+export type listSkillsApiV1AgentSkillsGetResponse200 = {
+  data: SkillRef[];
+  status: 200;
+};
+
+export type listSkillsApiV1AgentSkillsGetResponse422 = {
+  data: HTTPValidationError;
+  status: 422;
+};
+
+export type listSkillsApiV1AgentSkillsGetResponseSuccess =
+  listSkillsApiV1AgentSkillsGetResponse200 & {
+    headers: Headers;
+  };
+export type listSkillsApiV1AgentSkillsGetResponseError =
+  listSkillsApiV1AgentSkillsGetResponse422 & {
+    headers: Headers;
+  };
+
+export type listSkillsApiV1AgentSkillsGetResponse =
+  | listSkillsApiV1AgentSkillsGetResponseSuccess
+  | listSkillsApiV1AgentSkillsGetResponseError;
+
+export const getListSkillsApiV1AgentSkillsGetUrl = (
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/agent/skills?${stringifiedParams}`
+    : `/api/v1/agent/skills`;
+};
+
+export const listSkillsApiV1AgentSkillsGet = async (
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+  options?: RequestInit,
+): Promise<listSkillsApiV1AgentSkillsGetResponse> => {
+  return customFetch<listSkillsApiV1AgentSkillsGetResponse>(
+    getListSkillsApiV1AgentSkillsGetUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListSkillsApiV1AgentSkillsGetQueryKey = (
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+) => {
+  return [`/api/v1/agent/skills`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSkillsApiV1AgentSkillsGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSkillsApiV1AgentSkillsGetQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>
+  > = ({ signal }) =>
+    listSkillsApiV1AgentSkillsGet(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListSkillsApiV1AgentSkillsGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>
+>;
+export type ListSkillsApiV1AgentSkillsGetQueryError = HTTPValidationError;
+
+export function useListSkillsApiV1AgentSkillsGet<
+  TData = Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+  TError = HTTPValidationError,
+>(
+  params: undefined | ListSkillsApiV1AgentSkillsGetParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListSkillsApiV1AgentSkillsGet<
+  TData = Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListSkillsApiV1AgentSkillsGet<
+  TData = Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Skills
+ */
+
+export function useListSkillsApiV1AgentSkillsGet<
+  TData = Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListSkillsApiV1AgentSkillsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listSkillsApiV1AgentSkillsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListSkillsApiV1AgentSkillsGetQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * List skills assigned to a specific agent on the board.
+ * @summary List Agent Skills
+ */
+export type listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse200 =
+  {
+    data: SkillRef[];
+    status: 200;
+  };
+
+export type listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse422 =
+  {
+    data: HTTPValidationError;
+    status: 422;
+  };
+
+export type listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponseSuccess =
+  listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse200 & {
+    headers: Headers;
+  };
+export type listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponseError =
+  listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse422 & {
+    headers: Headers;
+  };
+
+export type listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse =
+
+    | listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponseSuccess
+    | listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponseError;
+
+export const getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetUrl =
+  (boardId: string, agentId: string) => {
+    return `/api/v1/agent/boards/${boardId}/agents/${agentId}/skills`;
+  };
+
+export const listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet =
+  async (
+    boardId: string,
+    agentId: string,
+    options?: RequestInit,
+  ): Promise<listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse> => {
+    return customFetch<listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetResponse>(
+      getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetUrl(
+        boardId,
+        agentId,
+      ),
+      {
+        ...options,
+        method: "GET",
+      },
+    );
+  };
+
+export const getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryKey =
+  (boardId: string, agentId: string) => {
+    return [
+      `/api/v1/agent/boards/${boardId}/agents/${agentId}/skills`,
+    ] as const;
+  };
+
+export const getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryOptions =
+  <
+    TData = Awaited<
+      ReturnType<
+        typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+      >
+    >,
+    TError = HTTPValidationError,
+  >(
+    boardId: string,
+    agentId: string,
+    options?: {
+      query?: Partial<
+        UseQueryOptions<
+          Awaited<
+            ReturnType<
+              typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+            >
+          >,
+          TError,
+          TData
+        >
+      >;
+      request?: SecondParameter<typeof customFetch>;
+    },
+  ) => {
+    const { query: queryOptions, request: requestOptions } = options ?? {};
+
+    const queryKey =
+      queryOptions?.queryKey ??
+      getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryKey(
+        boardId,
+        agentId,
+      );
+
+    const queryFn: QueryFunction<
+      Awaited<
+        ReturnType<
+          typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+        >
+      >
+    > = ({ signal }) =>
+      listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet(
+        boardId,
+        agentId,
+        { signal, ...requestOptions },
+      );
+
+    return {
+      queryKey,
+      queryFn,
+      enabled: !!(boardId && agentId),
+      ...queryOptions,
+    } as UseQueryOptions<
+      Awaited<
+        ReturnType<
+          typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+        >
+      >,
+      TError,
+      TData
+    > & { queryKey: DataTag<QueryKey, TData, TError> };
+  };
+
+export type ListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryResult =
+  NonNullable<
+    Awaited<
+      ReturnType<
+        typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+      >
+    >
+  >;
+export type ListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryError =
+  HTTPValidationError;
+
+export function useListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet<
+  TData = Awaited<
+    ReturnType<
+      typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+    >
+  >,
+  TError = HTTPValidationError,
+>(
+  boardId: string,
+  agentId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<
+            typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+          >
+        >,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<
+            ReturnType<
+              typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+            >
+          >,
+          TError,
+          Awaited<
+            ReturnType<
+              typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+            >
+          >
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet<
+  TData = Awaited<
+    ReturnType<
+      typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+    >
+  >,
+  TError = HTTPValidationError,
+>(
+  boardId: string,
+  agentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<
+            typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+          >
+        >,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<
+            ReturnType<
+              typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+            >
+          >,
+          TError,
+          Awaited<
+            ReturnType<
+              typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+            >
+          >
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet<
+  TData = Awaited<
+    ReturnType<
+      typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+    >
+  >,
+  TError = HTTPValidationError,
+>(
+  boardId: string,
+  agentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<
+            typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+          >
+        >,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Agent Skills
+ */
+
+export function useListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet<
+  TData = Awaited<
+    ReturnType<
+      typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+    >
+  >,
+  TError = HTTPValidationError,
+>(
+  boardId: string,
+  agentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<
+            typeof listAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGet
+          >
+        >,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions =
+    getListAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsGetQueryOptions(
+      boardId,
+      agentId,
+      options,
+    );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Replace all skill assignments for an agent (lead-only).
+
+Validates skill IDs exist in the organization, replaces assignments,
+and triggers re-provisioning to push skill files to the agent workspace.
+ * @summary Update Agent Skills
+ */
+export type updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse200 =
+  {
+    data: SkillRef[];
+    status: 200;
+  };
+
+export type updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse422 =
+  {
+    data: HTTPValidationError;
+    status: 422;
+  };
+
+export type updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponseSuccess =
+  updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse200 & {
+    headers: Headers;
+  };
+export type updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponseError =
+  updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse422 & {
+    headers: Headers;
+  };
+
+export type updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse =
+
+    | updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponseSuccess
+    | updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponseError;
+
+export const getUpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutUrl =
+  (boardId: string, agentId: string) => {
+    return `/api/v1/agent/boards/${boardId}/agents/${agentId}/skills`;
+  };
+
+export const updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut =
+  async (
+    boardId: string,
+    agentId: string,
+    agentSkillsUpdate: AgentSkillsUpdate,
+    options?: RequestInit,
+  ): Promise<updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse> => {
+    return customFetch<updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutResponse>(
+      getUpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutUrl(
+        boardId,
+        agentId,
+      ),
+      {
+        ...options,
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...options?.headers },
+        body: JSON.stringify(agentSkillsUpdate),
+      },
+    );
+  };
+
+export const getUpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutMutationOptions =
+  <TError = HTTPValidationError, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<
+          typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+        >
+      >,
+      TError,
+      { boardId: string; agentId: string; data: AgentSkillsUpdate },
+      TContext
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<
+        typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+      >
+    >,
+    TError,
+    { boardId: string; agentId: string; data: AgentSkillsUpdate },
+    TContext
+  > => {
+    const mutationKey = [
+      "updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut",
+    ];
+    const { mutation: mutationOptions, request: requestOptions } = options
+      ? options.mutation &&
+        "mutationKey" in options.mutation &&
+        options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey }, request: undefined };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<
+          typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+        >
+      >,
+      { boardId: string; agentId: string; data: AgentSkillsUpdate }
+    > = (props) => {
+      const { boardId, agentId, data } = props ?? {};
+
+      return updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut(
+        boardId,
+        agentId,
+        data,
+        requestOptions,
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type UpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutMutationResult =
+  NonNullable<
+    Awaited<
+      ReturnType<
+        typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+      >
+    >
+  >;
+export type UpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutMutationBody =
+  AgentSkillsUpdate;
+export type UpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutMutationError =
+  HTTPValidationError;
+
+/**
+ * @summary Update Agent Skills
+ */
+export const useUpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut =
+  <TError = HTTPValidationError, TContext = unknown>(
+    options?: {
+      mutation?: UseMutationOptions<
+        Awaited<
+          ReturnType<
+            typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+          >
+        >,
+        TError,
+        { boardId: string; agentId: string; data: AgentSkillsUpdate },
+        TContext
+      >;
+      request?: SecondParameter<typeof customFetch>;
+    },
+    queryClient?: QueryClient,
+  ): UseMutationResult<
+    Awaited<
+      ReturnType<
+        typeof updateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPut
+      >
+    >,
+    TError,
+    { boardId: string; agentId: string; data: AgentSkillsUpdate },
+    TContext
+  > => {
+    return useMutation(
+      getUpdateAgentSkillsApiV1AgentBoardsBoardIdAgentsAgentIdSkillsPutMutationOptions(
         options,
       ),
       queryClient,

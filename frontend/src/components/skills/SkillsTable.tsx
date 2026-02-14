@@ -92,8 +92,8 @@ export function SkillsTable({
         accessorKey: "source",
         header: "Source",
         cell: ({ row }) => {
-          const label =
-            SOURCE_LABELS[row.original.source] ?? row.original.source;
+          const src = row.original.source ?? "custom";
+          const label = SOURCE_LABELS[src] ?? src;
           return (
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-700">
               {label}

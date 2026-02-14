@@ -19,4 +19,5 @@ export interface AgentUpdate {
   identity_profile?: AgentUpdateIdentityProfile;
   identity_template?: string | null;
   soul_template?: string | null;
+  skill_ids?: string[] | null;
 }

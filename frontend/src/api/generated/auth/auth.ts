@@ -12,7 +12,12 @@ import type {
   UseMutationResult,
 } from "@tanstack/react-query";
 
-import type { UserRead } from ".././model";
+import type {
+  HTTPValidationError,
+  LoginRequest,
+  TokenResponse,
+  UserRead,
+} from ".././model";
 
 import { customFetch } from "../../mutator";
 
@@ -117,6 +122,124 @@ export const useBootstrapUserApiV1AuthBootstrapPost = <
 > => {
   return useMutation(
     getBootstrapUserApiV1AuthBootstrapPostMutationOptions(options),
+    queryClient,
+  );
+};
+/**
+ * Authenticate a local user with email and password, returning a JWT.
+ * @summary Login
+ */
+export type loginApiV1AuthLoginPostResponse200 = {
+  data: TokenResponse;
+  status: 200;
+};
+
+export type loginApiV1AuthLoginPostResponse422 = {
+  data: HTTPValidationError;
+  status: 422;
+};
+
+export type loginApiV1AuthLoginPostResponseSuccess =
+  loginApiV1AuthLoginPostResponse200 & {
+    headers: Headers;
+  };
+export type loginApiV1AuthLoginPostResponseError =
+  loginApiV1AuthLoginPostResponse422 & {
+    headers: Headers;
+  };
+
+export type loginApiV1AuthLoginPostResponse =
+  | loginApiV1AuthLoginPostResponseSuccess
+  | loginApiV1AuthLoginPostResponseError;
+
+export const getLoginApiV1AuthLoginPostUrl = () => {
+  return `/api/v1/auth/login`;
+};
+
+export const loginApiV1AuthLoginPost = async (
+  loginRequest: LoginRequest,
+  options?: RequestInit,
+): Promise<loginApiV1AuthLoginPostResponse> => {
+  return customFetch<loginApiV1AuthLoginPostResponse>(
+    getLoginApiV1AuthLoginPostUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(loginRequest),
+    },
+  );
+};
+
+export const getLoginApiV1AuthLoginPostMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>,
+    TError,
+    { data: LoginRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>,
+  TError,
+  { data: LoginRequest },
+  TContext
+> => {
+  const mutationKey = ["loginApiV1AuthLoginPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>,
+    { data: LoginRequest }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return loginApiV1AuthLoginPost(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LoginApiV1AuthLoginPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>
+>;
+export type LoginApiV1AuthLoginPostMutationBody = LoginRequest;
+export type LoginApiV1AuthLoginPostMutationError = HTTPValidationError;
+
+/**
+ * @summary Login
+ */
+export const useLoginApiV1AuthLoginPost = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>,
+      TError,
+      { data: LoginRequest },
+      TContext
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof loginApiV1AuthLoginPost>>,
+  TError,
+  { data: LoginRequest },
+  TContext
+> => {
+  return useMutation(
+    getLoginApiV1AuthLoginPostMutationOptions(options),
     queryClient,
   );
 };

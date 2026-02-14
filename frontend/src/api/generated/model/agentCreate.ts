@@ -19,4 +19,5 @@ export interface AgentCreate {
   identity_profile?: AgentCreateIdentityProfile;
   identity_template?: string | null;
   soul_template?: string | null;
+  skill_ids?: string[] | null;
 }

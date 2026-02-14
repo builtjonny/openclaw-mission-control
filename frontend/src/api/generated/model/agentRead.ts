@@ -6,6 +6,7 @@
  */
 import type { AgentReadHeartbeatConfig } from "./agentReadHeartbeatConfig";
 import type { AgentReadIdentityProfile } from "./agentReadIdentityProfile";
+import type { SkillRef } from "./skillRef";
 
 /**
  * Public agent representation returned by the API.
@@ -25,6 +26,7 @@ export interface AgentRead {
   is_gateway_main?: boolean;
   openclaw_session_id?: string | null;
   last_seen_at: string | null;
+  skills?: SkillRef[];
   created_at: string;
   updated_at: string;
 }
