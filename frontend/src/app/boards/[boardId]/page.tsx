@@ -1158,8 +1158,9 @@ export default function BoardDetailPage() {
       setAgents((snapshot.agents ?? []).map(normalizeAgent));
       setApprovals((snapshot.approvals ?? []).map(normalizeApproval));
       setChatMessages(snapshot.chat_messages ?? []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setBoardAttachments(
-        ((snapshot as Record<string, unknown>).attachments as BoardAttachment[] | undefined) ?? [],
+        ((snapshot as any).attachments as BoardAttachment[] | undefined) ?? [],
       );
 
       try {
