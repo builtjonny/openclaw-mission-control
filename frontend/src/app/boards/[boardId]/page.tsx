@@ -3874,7 +3874,7 @@ export default function BoardDetailPage() {
         )}
       >
         <BoardAttachmentsPanel
-          boardId={boardId}
+          boardId={boardId!}
           attachments={boardAttachments}
           onClose={() => setIsAttachmentsOpen(false)}
           onRefresh={() => {
