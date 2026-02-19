@@ -9,12 +9,15 @@ from sqlmodel import col, select
 
 from app.models.agents import Agent
 from app.models.approvals import Approval
+from app.models.board_attachments import BoardAttachment
 from app.models.board_memory import BoardMemory
 from app.models.tasks import Task
 from app.schemas.approvals import ApprovalRead
+from app.schemas.board_attachments import BoardAttachmentRead
 from app.schemas.board_memory import BoardMemoryRead
 from app.schemas.boards import BoardRead
 from app.schemas.view_models import BoardSnapshot, TaskCardRead
+from app.core.config import settings
 from app.services.approval_task_links import load_task_ids_by_approval, task_counts_for_board
 from app.services.openclaw.provisioning_db import AgentLifecycleService
 from app.services.tags import TagState, load_tag_state
@@ -196,11 +199,32 @@ async def build_board_snapshot(session: AsyncSession, board: Board) -> BoardSnap
     chat_messages.sort(key=lambda item: item.created_at)
     chat_reads = [_memory_to_read(memory) for memory in chat_messages]
 
+    # Attachments
+    attachments = await BoardAttachment.objects.filter_by(board_id=board.id).order_by(
+        col(BoardAttachment.created_at).desc(),
+    ).all(session)
+    base_url = (settings.base_url or "http://localhost:8000").rstrip("/")
+    attachment_reads = [
+        BoardAttachmentRead(
+            id=a.id,
+            board_id=a.board_id,
+            filename=a.filename,
+            content_type=a.content_type,
+            size_bytes=a.size_bytes,
+            uploaded_by=a.uploaded_by,
+            description=a.description,
+            download_url=f"{base_url}/api/v1/boards/{board.id}/attachments/{a.id}/download",
+            created_at=a.created_at,
+        )
+        for a in attachments
+    ]
+
     return BoardSnapshot(
         board=board_read,
         tasks=task_cards,
         agents=agent_reads,
         approvals=approval_reads,
         chat_messages=chat_reads,
+        attachments=attachment_reads,
         pending_approvals_count=pending_approvals_count,
     )

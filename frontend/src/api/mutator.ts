@@ -128,3 +128,63 @@ export const customFetch = async <T>(
     headers: response.headers,
   } as T;
 };
+
+/**
+ * Upload a file via multipart/form-data.
+ * Unlike customFetch, this does NOT set Content-Type (the browser auto-sets
+ * the multipart boundary) and returns the parsed JSON body directly.
+ */
+export const uploadFetch = async <T>(
+  url: string,
+  formData: FormData,
+): Promise<T> => {
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!rawBaseUrl) {
+    throw new Error("NEXT_PUBLIC_API_URL is not set.");
+  }
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+
+  const headers: HeadersInit = {};
+  if (isLocalAuthMode()) {
+    const token = getLocalAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  if (!("Authorization" in headers)) {
+    const token = await resolveClerkToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
+  const response = await fetch(`${baseUrl}${url}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") ?? "";
+    let errorData: unknown = null;
+    if (
+      contentType.includes("application/json") ||
+      contentType.includes("+json")
+    ) {
+      errorData = (await response.json().catch(() => null)) as unknown;
+    } else {
+      errorData = await response.text().catch(() => "");
+    }
+    let message =
+      typeof errorData === "string" && errorData ? errorData : "Upload failed";
+    if (errorData && typeof errorData === "object") {
+      const detail = (errorData as { detail?: unknown }).detail;
+      if (typeof detail === "string" && detail) {
+        message = detail;
+      }
+    }
+    throw new ApiError(response.status, message, errorData);
+  }
+
+  return (await response.json()) as T;
+};

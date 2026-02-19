@@ -10,6 +10,7 @@ import {
   Activity,
   ArrowUpRight,
   MessageSquare,
+  Paperclip,
   Pause,
   Plus,
   Pencil,
@@ -17,16 +18,27 @@ import {
   RefreshCcw,
   Settings,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
 
 import { Markdown } from "@/components/atoms/Markdown";
 import { StatusDot } from "@/components/atoms/StatusDot";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
+import { AgentFileEditorDialog } from "@/components/organisms/AgentFileEditorDialog";
+import {
+  BoardAttachmentsPanel,
+  type BoardAttachment,
+} from "@/components/organisms/BoardAttachmentsPanel";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { BoardChatComposer } from "@/components/BoardChatComposer";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -62,6 +74,7 @@ import {
   createBoardMemoryApiV1BoardsBoardIdMemoryPost,
   streamBoardMemoryApiV1BoardsBoardIdMemoryStreamGet,
 } from "@/api/generated/board-memory/board-memory";
+import { customFetch } from "@/api/mutator";
 import {
   type getMyMembershipApiV1OrganizationsMeMemberGetResponse,
   useGetMyMembershipApiV1OrganizationsMeMemberGet,
@@ -122,6 +135,16 @@ type TaskComment = TaskCommentRead;
 type Approval = ApprovalRead & { status: string };
 
 type BoardChatMessage = BoardMemoryRead;
+
+// Manual delete helper until API client is regenerated via `make api-gen`.
+const deleteBoardMemory = async (
+  boardId: string,
+  memoryId: string,
+): Promise<{ data: { ok: boolean }; status: number }> => {
+  return customFetch(`/api/v1/boards/${boardId}/memory/${memoryId}`, {
+    method: "DELETE",
+  });
+};
 
 type LiveFeedEventType =
   | "task.comment"
@@ -551,18 +574,33 @@ TaskCommentCard.displayName = "TaskCommentCard";
 
 const ChatMessageCard = memo(function ChatMessageCard({
   message,
+  onDelete,
+  canWrite,
 }: {
   message: BoardChatMessage;
+  onDelete?: (id: string) => void;
+  canWrite?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+    <div className="group rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-900">
           {message.source ?? "User"}
         </p>
-        <span className="text-xs text-slate-400">
-          {formatShortTimestamp(message.created_at)}
-        </span>
+        <div className="flex items-center gap-2">
+          {canWrite && onDelete ? (
+            <button
+              onClick={() => onDelete(message.id)}
+              className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100"
+              title="Delete message"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <span className="text-xs text-slate-400">
+            {formatShortTimestamp(message.created_at)}
+          </span>
+        </div>
       </div>
       <div className="mt-2 select-text cursor-text text-sm leading-relaxed text-slate-900 break-words">
         <Markdown content={message.content} variant="basic" />
@@ -773,10 +811,18 @@ export default function BoardDetailPage() {
   const [agentsControlError, setAgentsControlError] = useState<string | null>(
     null,
   );
+  const [fileEdit, setFileEdit] = useState<{
+    agent: AgentRead;
+    fileName: string;
+  } | null>(null);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
   const [isLiveFeedOpen, setIsLiveFeedOpen] = useState(false);
+  const [isAttachmentsOpen, setIsAttachmentsOpen] = useState(false);
+  const [boardAttachments, setBoardAttachments] = useState<BoardAttachment[]>(
+    [],
+  );
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const isLiveFeedOpenRef = useRef(false);
   const toastIdRef = useRef(0);
@@ -1022,7 +1068,8 @@ export default function BoardDetailPage() {
   const [isSavingTask, setIsSavingTask] = useState(false);
   const [saveTaskError, setSaveTaskError] = useState<string | null>(null);
 
-  const isSidePanelOpen = isDetailOpen || isChatOpen || isLiveFeedOpen;
+  const isSidePanelOpen =
+    isDetailOpen || isChatOpen || isLiveFeedOpen || isAttachmentsOpen;
 
   const titleLabel = useMemo(
     () => (board ? `${board.name} board` : "Board"),
@@ -1111,6 +1158,9 @@ export default function BoardDetailPage() {
       setAgents((snapshot.agents ?? []).map(normalizeAgent));
       setApprovals((snapshot.approvals ?? []).map(normalizeApproval));
       setChatMessages(snapshot.chat_messages ?? []);
+      setBoardAttachments(
+        (snapshot.attachments as BoardAttachment[] | undefined) ?? [],
+      );
 
       try {
         const groupResult =
@@ -1897,6 +1947,22 @@ export default function BoardDetailPage() {
     [boardId, isSignedIn, pushLiveFeed],
   );
 
+  const handleDeleteChatMessage = useCallback(
+    async (memoryId: string) => {
+      if (!boardId || !isSignedIn) return;
+      if (!window.confirm("Delete this message permanently?")) return;
+      try {
+        const result = await deleteBoardMemory(boardId, memoryId);
+        if (result.status !== 200) throw new Error("Unable to delete message.");
+        setChatMessages((prev) => prev.filter((m) => m.id !== memoryId));
+      } catch (err) {
+        const message = formatActionError(err, "Unable to delete message.");
+        pushToast(message);
+      }
+    },
+    [boardId, isSignedIn, pushToast],
+  );
+
   const handleSendChat = useCallback(
     async (content: string): Promise<boolean> => {
       const trimmed = content.trim();
@@ -2235,6 +2301,7 @@ export default function BoardDetailPage() {
       closeComments();
     }
     setIsLiveFeedOpen(false);
+    setIsAttachmentsOpen(false);
     setIsChatOpen(true);
   };
 
@@ -2250,6 +2317,7 @@ export default function BoardDetailPage() {
     if (isChatOpen) {
       closeBoardChat();
     }
+    setIsAttachmentsOpen(false);
     setIsLiveFeedOpen(true);
   };
 
@@ -2836,6 +2904,24 @@ export default function BoardDetailPage() {
                   </Button>
                   <Button
                     variant="outline"
+                    onClick={() => {
+                      setIsAttachmentsOpen(true);
+                      setIsChatOpen(false);
+                      setIsLiveFeedOpen(false);
+                    }}
+                    className="relative h-9 w-9 p-0"
+                    aria-label="Attachments"
+                    title="Attachments"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    {boardAttachments.length > 0 ? (
+                      <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
+                        {boardAttachments.length}
+                      </span>
+                    ) : null}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={openLiveFeed}
                     className="h-9 w-9 p-0"
                     aria-label="Live feed"
@@ -2857,6 +2943,47 @@ export default function BoardDetailPage() {
                 </div>
               </div>
             </div>
+            {isOrgAdmin && sortedAgents.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-8 py-2.5">
+                <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Files
+                </span>
+                {sortedAgents.map((agent) => (
+                  <Popover key={agent.id}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                        title={`Edit ${agent.name} files`}
+                      >
+                        <span>{agentAvatarLabel(agent)}</span>
+                        <span className="max-w-[80px] truncate">
+                          {agent.name.split(" ")[0]}
+                        </span>
+                        <Pencil className="h-3 w-3 text-slate-400" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      className="w-44 p-1"
+                    >
+                      {["SOUL.md", "TASK_SOUL.md", "SELF.md"].map(
+                        (fn) => (
+                          <button
+                            key={fn}
+                            type="button"
+                            className="flex w-full items-center rounded-md px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100"
+                            onClick={() => setFileEdit({ agent, fileName: fn })}
+                          >
+                            {fn}
+                          </button>
+                        ),
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="relative flex gap-6 p-6">
@@ -3286,11 +3413,13 @@ export default function BoardDetailPage() {
           </div>
         </main>
       </SignedIn>
-      {isDetailOpen || isChatOpen || isLiveFeedOpen ? (
+      {isDetailOpen || isChatOpen || isLiveFeedOpen || isAttachmentsOpen ? (
         <div
           className="fixed inset-0 z-40 bg-slate-900/20"
           onClick={() => {
-            if (isChatOpen) {
+            if (isAttachmentsOpen) {
+              setIsAttachmentsOpen(false);
+            } else if (isChatOpen) {
               closeBoardChat();
             } else if (isLiveFeedOpen) {
               closeLiveFeed();
@@ -3632,7 +3761,12 @@ export default function BoardDetailPage() {
                 </p>
               ) : (
                 chatMessages.map((message) => (
-                  <ChatMessageCard key={message.id} message={message} />
+                  <ChatMessageCard
+                    key={message.id}
+                    message={message}
+                    onDelete={handleDeleteChatMessage}
+                    canWrite={canWrite}
+                  />
                 ))
               )}
               <div ref={chatEndRef} />
@@ -3730,6 +3864,23 @@ export default function BoardDetailPage() {
             )}
           </div>
         </div>
+      </aside>
+
+      <aside
+        className={cn(
+          "fixed right-0 top-0 z-50 h-full w-[480px] max-w-[96vw] transform border-l border-slate-200 bg-white shadow-2xl transition-transform",
+          isAttachmentsOpen ? "transform-none" : "translate-x-full",
+        )}
+      >
+        <BoardAttachmentsPanel
+          boardId={boardId}
+          attachments={boardAttachments}
+          onClose={() => setIsAttachmentsOpen(false)}
+          onRefresh={() => {
+            loadBoard();
+          }}
+          canWrite={canWrite}
+        />
       </aside>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -4259,6 +4410,15 @@ export default function BoardDetailPage() {
           </DialogContent>
         </Dialog>
       ) : null}
+
+      <AgentFileEditorDialog
+        agent={fileEdit?.agent ?? null}
+        fileName={fileEdit?.fileName ?? "SOUL.md"}
+        open={fileEdit !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setFileEdit(null);
+        }}
+      />
 
       {toasts.length ? (
         <div className="fixed bottom-6 right-6 z-[60] flex w-[320px] max-w-[90vw] flex-col gap-3">

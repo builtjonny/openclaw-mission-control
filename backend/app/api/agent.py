@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, Any
 from typing import cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func
 from sqlmodel import SQLModel, col, select
 
 from app.api import agents as agents_api
 from app.api import approvals as approvals_api
+from app.api import board_attachments as board_attachments_api
 from app.api import board_memory as board_memory_api
 from app.api import board_onboarding as onboarding_api
 from app.api import tasks as tasks_api
@@ -34,6 +35,7 @@ from app.schemas.agents import (
     AgentRead,
 )
 from app.schemas.approvals import ApprovalCreate, ApprovalRead, ApprovalStatus
+from app.schemas.board_attachments import BoardAttachmentRead
 from app.schemas.board_memory import BoardMemoryCreate, BoardMemoryRead
 from app.schemas.board_onboarding import BoardOnboardingAgentUpdate, BoardOnboardingRead
 from app.schemas.boards import BoardRead
@@ -892,3 +894,71 @@ async def update_agent_skills(
     state = await load_skill_state(session, agent_ids=[agent_id])
     agent_state = state.get(agent_id)
     return agent_state.skills if agent_state else []
+
+
+# ---------------------------------------------------------------------------
+# Board Attachments
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/boards/{board_id}/attachments",
+    response_model=DefaultLimitOffsetPage[BoardAttachmentRead],
+    tags=AGENT_BOARD_TAGS,
+)
+async def list_board_attachments(
+    board: Board = BOARD_DEP,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+) -> LimitOffsetPage[BoardAttachmentRead]:
+    """List file attachments on a board."""
+    _guard_board_access(agent_ctx, board)
+    return await board_attachments_api.list_board_attachments(
+        board=board,
+        session=session,
+        _actor=_actor(agent_ctx),
+    )
+
+
+@router.get(
+    "/boards/{board_id}/attachments/{attachment_id}/download",
+    tags=AGENT_BOARD_TAGS,
+)
+async def download_board_attachment(
+    attachment_id: UUID,
+    board: Board = BOARD_DEP,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+) -> Any:
+    """Download a file attachment."""
+    _guard_board_access(agent_ctx, board)
+    return await board_attachments_api.download_board_attachment(
+        attachment_id=attachment_id,
+        board=board,
+        session=session,
+        _actor=_actor(agent_ctx),
+    )
+
+
+@router.post(
+    "/boards/{board_id}/attachments",
+    response_model=BoardAttachmentRead,
+    status_code=201,
+    tags=AGENT_BOARD_TAGS,
+)
+async def upload_board_attachment(
+    file: UploadFile,
+    board: Board = BOARD_DEP,
+    session: AsyncSession = SESSION_DEP,
+    agent_ctx: AgentAuthContext = AGENT_CTX_DEP,
+    description: str | None = Form(default=None),
+) -> BoardAttachmentRead:
+    """Upload a file attachment to a board."""
+    _guard_board_access(agent_ctx, board)
+    return await board_attachments_api.upload_board_attachment(
+        file=file,
+        board=board,
+        session=session,
+        actor=_actor(agent_ctx),
+        description=description,
+    )

@@ -6,16 +6,21 @@ OpenClaw gateway. API routes should remain thin wrappers over these helpers.
 
 from __future__ import annotations
 
+import logging
+import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from sqlmodel import col, select
 
+from app.core.config import settings
 from app.db import crud
 from app.models.activity_events import ActivityEvent
 from app.models.agents import Agent
 from app.models.approval_task_links import ApprovalTaskLink
 from app.models.approvals import Approval
+from app.models.board_attachments import BoardAttachment
 from app.models.board_memory import BoardMemory
 from app.models.board_onboarding import BoardOnboardingSession
 from app.models.board_webhook_payloads import BoardWebhookPayload
@@ -35,6 +40,8 @@ if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
 
     from app.models.boards import Board
+
+logger = logging.getLogger(__name__)
 
 
 def _is_missing_gateway_agent_error(exc: OpenClawGatewayError) -> bool:
@@ -104,6 +111,21 @@ async def delete_board(session: AsyncSession, *, board: Board) -> OkResponse:
         commit=False,
     )
     await crud.delete_where(session, Approval, col(Approval.board_id) == board.id)
+
+    # Delete attachment files from disk and DB rows.
+    attachments = await BoardAttachment.objects.filter_by(board_id=board.id).all(session)
+    uploads_root = Path(settings.uploads_root)
+    for attachment in attachments:
+        file_path = uploads_root / attachment.storage_path
+        file_path.unlink(missing_ok=True)
+        try:
+            file_path.parent.rmdir()
+        except OSError:
+            pass
+        await session.delete(attachment)
+    board_upload_dir = uploads_root / str(board.id)
+    if board_upload_dir.is_dir():
+        shutil.rmtree(board_upload_dir, ignore_errors=True)
 
     await crud.delete_where(session, BoardMemory, col(BoardMemory.board_id) == board.id)
     await crud.delete_where(

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     base_url: str = ""
 
+    # File uploads
+    uploads_root: str = "/app/uploads"
+    max_upload_size_bytes: int = 25 * 1024 * 1024  # 25 MB
+    max_board_attachments_bytes: int = 250 * 1024 * 1024  # 250 MB per board
+
     # Database lifecycle
     db_auto_migrate: bool = False
 

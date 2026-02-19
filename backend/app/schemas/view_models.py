@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel
 
 from app.schemas.agents import AgentRead
 from app.schemas.approvals import ApprovalRead
+from app.schemas.board_attachments import BoardAttachmentRead
 from app.schemas.board_groups import BoardGroupRead
 from app.schemas.board_memory import BoardMemoryRead
 from app.schemas.boards import BoardRead
@@ -20,6 +21,7 @@ RUNTIME_ANNOTATION_TYPES = (
     UUID,
     AgentRead,
     ApprovalRead,
+    BoardAttachmentRead,
     BoardGroupRead,
     BoardMemoryRead,
     BoardRead,
@@ -43,6 +45,7 @@ class BoardSnapshot(SQLModel):
     agents: list[AgentRead]
     approvals: list[ApprovalRead]
     chat_messages: list[BoardMemoryRead]
+    attachments: list[BoardAttachmentRead] = Field(default_factory=list)
     pending_approvals_count: int = 0
 
 
