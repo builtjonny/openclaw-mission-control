@@ -1159,7 +1159,7 @@ export default function BoardDetailPage() {
       setApprovals((snapshot.approvals ?? []).map(normalizeApproval));
       setChatMessages(snapshot.chat_messages ?? []);
       setBoardAttachments(
-        (snapshot.attachments as BoardAttachment[] | undefined) ?? [],
+        ((snapshot as Record<string, unknown>).attachments as BoardAttachment[] | undefined) ?? [],
       );
 
       try {
