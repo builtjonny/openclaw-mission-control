@@ -1,7 +1,7 @@
 """add board_attachments
 
 Revision ID: c6d4e8f2a1b3
-Revises: b5e2d7f8a3c1
+Revises: c7f3a8d1e2b4
 Create Date: 2026-02-19 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "c6d4e8f2a1b3"
-down_revision = "b5e2d7f8a3c1"
+down_revision = "c7f3a8d1e2b4"
 branch_labels = None
 depends_on = None
 
